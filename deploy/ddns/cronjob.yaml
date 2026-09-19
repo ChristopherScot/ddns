@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ddns
+  namespace: ddns
+  labels:
+    app: ddns
+    team: me-myself-and-i
+spec:
+  schedule: "*/5 * * * *"
+  # Without an explicit zone Kubernetes schedules in UTC, so a schedule
+  # that reads as 3am fires at 11pm the previous evening in ET.
+  timeZone: "America/New_York"
+  # Forbid: a run that overruns its interval must not have a second copy
+  # started alongside it.
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # A hung job must die rather than block every later run.
+      activeDeadlineSeconds: 600
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: ddns
+            team: me-myself-and-i
+        spec:
+          restartPolicy: Never
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          serviceAccountName: ddns
+          containers:
+            - name: ddns
+              image: ghcr.io/christopherscot/ddns:latest
+              envFrom:
+                - secretRef:
+                    name: ddns-secrets
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 64Mi
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                runAsUser: 65532
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+          volumes:
+            - name: tmp
+              emptyDir: {}

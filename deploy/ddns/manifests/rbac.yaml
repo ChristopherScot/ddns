@@ -1,0 +1,41 @@
+# Lets this job ask the cluster which hostnames are public.
+#
+# Raw Kubernetes rather than something homelabctl renders, because it is
+# about this service's relationship to the API server rather than about
+# the service itself. Nothing else here needs API access, so there is no
+# convention to extract yet.
+#
+# Deliberately minimal, and worth keeping that way: this is a job with an
+# AWS credential that can rewrite DNS for the whole zone, so its cluster
+# identity should be able to read the one resource it makes decisions
+# from and nothing else. get/list on ingresses, no watch, no write, no
+# secrets, no pods.
+#
+# Cluster-scoped rather than a Role per namespace: the point of this job
+# is that a public hostname ANYWHERE gets a DNS record, so scoping it to
+# a list of namespaces would reintroduce exactly the list this rewrite
+# removed.
+#
+# The ServiceAccount itself is not here - homelabctl renders `ddns`
+# alongside the ExternalSecret, and the pod already runs as it.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ddns-ingress-reader
+rules:
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ddns-ingress-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ddns-ingress-reader
+subjects:
+  - kind: ServiceAccount
+    name: ddns
+    namespace: ddns

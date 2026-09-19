@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=config.schema.json
+# The single source of truth for this service. `homelabctl render`
+# regenerates every manifest from it, so change things here rather than
+# editing deploy/ by hand.
+name: ddns
+team: me-myself-and-i
+runtime: go-service
+spec: false
+image:
+    repository: ghcr.io/christopherscot/ddns
+resources:
+    cpuRequest: 10m
+    memoryRequest: 32Mi
+    memoryLimit: 64Mi
+hardened: true
+# No metrics: this job runs for a couple of seconds every five minutes
+# and exits. There is no process for Alloy to scrape - by the time a
+# scrape arrived the pod would be gone, so an annotation here would only
+# ever produce a target that is down. If this ever needs monitoring, the
+# question is "did the last run succeed", which is a kube_job_status
+# alert on the CronJob rather than a scrape of the pod.
+metrics: false
+
+# secrets:
+#   vaultPath: <name>/config      # one Vault path per service
+#   keys: [SOME_TOKEN]
+
+# A scheduled job, not a server. Every five minutes, like the shell
+# version it replaces.
+kind: cronjob
+schedule: "*/5 * * * *"
+timeZone: America/New_York
+
+# Two credentials, both reused rather than reissued.
+#
+# The AWS key is cert-manager's: its IAM policy already allows exactly
+# ChangeResourceRecordSets and ListResourceRecordSets on the
+# chrisscotmartin.com zone, which is all this needs. The ntfy token is
+# ntfy's, and lives under its own path - hence the `ntfy/config/` prefix
+# on that one key.
+#
+# Minting second copies under a ddns/ path would mean two more secrets
+# to rotate and two more places for them to drift out of sync with the
+# originals.
+#
+# grafana_token is named for its first user, not for its scope: it is
+# the shared token with publish access to homelab-warning. Verified
+# rather than assumed - approvald's own NTFY_TOKEN gets a 403 there.
+secrets:
+    vaultPath: cert-manager/route53
+    keys:
+        - AWS_ACCESS_KEY_ID: access_key_id
+        - AWS_SECRET_ACCESS_KEY: secret_access_key
+        - HOSTED_ZONE_ID: hosted_zone_id
+        - NTFY_TOKEN: ntfy/config/grafana_token
+
+# The RBAC this job needs to discover which hostnames are public.
+#
+# Raw Kubernetes because it is about the cluster rather than about the
+# service: a ServiceAccount, and a ClusterRole granting get/list on
+# ingresses and nothing else.
+manifests:
+    - rbac.yaml
