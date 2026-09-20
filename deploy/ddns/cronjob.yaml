@@ -23,6 +23,8 @@ spec:
       backoffLimit: 2
       template:
         metadata:
+          annotations:
+            reloader.stakater.com/secret-reload-on-change: "ddns-secrets"
           labels:
             app: ddns
             team: me-myself-and-i
